@@ -1,0 +1,108 @@
+### Films
+
+@baseUrl = http://localhost:3000
+@firstFilmID = e804a2f8-dad3-4fd8-9387-1d0d6f8ea4e5
+@firstHallID = 460005cb-0b68-4e74-9e46-dd8c62af0472
+@firstShowingID = 94b6f839-207f-4895-a87d-4fbcbcbc9edc
+@firstBookingID = 01c98762-61ff-4059-8cb3-3e9136b14794
+
+### Створити фільм
+POST {{baseUrl}}/films
+Content-Type: application/json
+
+{
+  "title": "Interstellar",
+  "durationMinutes": 169,
+  "releaseYear": 2014
+}
+
+### Отримати всі фільми
+GET {{baseUrl}}/films
+
+### Отримати фільм за ID
+GET {{baseUrl}}/films/{{firstFilmID}}
+
+### Оновити фільм
+PATCH {{baseUrl}}/films/{{firstFilmID}}
+Content-Type: application/json
+
+{
+  "title": "Interstellar: Updated"
+}
+
+### Видалити фільм
+DELETE {{baseUrl}}/films/{{firstFilmID}}
+
+
+### Halls
+
+### Створити зал
+POST {{baseUrl}}/halls
+Content-Type: application/json
+
+{
+  "name": "Hall 1",
+  "rows": 5,
+  "seatsPerRow": 10
+}
+
+### Отримати всі зали
+GET {{baseUrl}}/halls
+
+### Отримати зал із місцями
+GET {{baseUrl}}/halls/{{firstHallID}}
+
+### Видалити зал
+DELETE {{baseUrl}}/halls/{{firstHallID}}
+
+
+### Showings
+
+### Створити сеанс
+POST {{baseUrl}}/showings
+Content-Type: application/json
+
+{
+  "filmId": "{{firstFilmID}}",
+  "hallId": "{{firstHallID}}",
+  "startsAt": "2030-12-25T18:30:00.000Z",
+  "price": 12500
+}
+
+### Отримати всі сеанси
+GET {{baseUrl}}/showings
+
+### Фільтрувати сеанси за фільмом
+GET {{baseUrl}}/showings?filmId={{firstFilmID}}
+
+### Фільтрувати сеанси за датою
+GET {{baseUrl}}/showings?date=2030-12-25
+
+### Отримати сеанс за ID
+GET {{baseUrl}}/showings/{{firstShowingID}}
+
+
+### Bookings
+
+### Створити бронювання
+POST {{baseUrl}}/showings/{{firstShowingID}}/bookings
+Content-Type: application/json
+
+{
+  "seats": [
+    { "row": 2, "seat": 5 },
+    { "row": 2, "seat": 6 }
+  ]
+}
+
+### Отримати всі бронювання
+GET {{baseUrl}}/bookings
+
+### Отримати бронювання конкретного сеансу
+GET {{baseUrl}}/showings/{{firstShowingID}}/bookings
+
+### Отримати місця та їхній статус
+GET {{baseUrl}}/showings/{{firstShowingID}}/seats
+
+### Скасувати бронювання
+DELETE {{baseUrl}}/bookings/{{firstBookingID}}

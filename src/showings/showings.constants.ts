@@ -1,0 +1,1 @@
+export const SHOWINGS_SERVICE = 'SHOWINGS_SERVICE';
