@@ -1,108 +1,203 @@
-### Films
+### requests.http
 
+```http
 @baseUrl = http://localhost:3000
-@firstFilmID = e804a2f8-dad3-4fd8-9387-1d0d6f8ea4e5
-@firstHallID = 460005cb-0b68-4e74-9e46-dd8c62af0472
-@firstShowingID = 94b6f839-207f-4895-a87d-4fbcbcbc9edc
-@firstBookingID = 01c98762-61ff-4059-8cb3-3e9136b14794
+@missingId = 00000000-0000-4000-8000-000000000000
+
+# 1. FILMS
 
 ### Створити фільм
+# @name createFilm
 POST {{baseUrl}}/films
 Content-Type: application/json
 
 {
-  "title": "Interstellar",
-  "durationMinutes": 169,
-  "releaseYear": 2014
+  "title": "Test Movie",
+  "durationMinutes": 120,
+  "releaseYear": 2024
 }
 
 ### Отримати всі фільми
 GET {{baseUrl}}/films
 
 ### Отримати фільм за ID
-GET {{baseUrl}}/films/{{firstFilmID}}
+GET {{baseUrl}}/films/{{createFilm.response.body.id}}
 
 ### Оновити фільм
-PATCH {{baseUrl}}/films/{{firstFilmID}}
+PATCH {{baseUrl}}/films/{{createFilm.response.body.id}}
 Content-Type: application/json
 
 {
-  "title": "Interstellar: Updated"
+  "title": "Updated Test Movie"
 }
 
-### Видалити фільм
-DELETE {{baseUrl}}/films/{{firstFilmID}}
+### Помилка: невалідні дані фільму (400 Bad Request)
+POST {{baseUrl}}/films
+Content-Type: application/json
 
+{
+  "title": "",
+  "durationMinutes": -10,
+  "releaseYear": 3000
+}
 
-### Halls
+### Помилка: фільм не знайдено (404 Not Found)
+GET {{baseUrl}}/films/{{missingId}}
+
+# 2. HALLS
 
 ### Створити зал
+# @name createHall
 POST {{baseUrl}}/halls
 Content-Type: application/json
 
 {
-  "name": "Hall 1",
-  "rows": 5,
-  "seatsPerRow": 10
+  "name": "Test Hall",
+  "rows": 10,
+  "seatsPerRow": 12
 }
 
 ### Отримати всі зали
 GET {{baseUrl}}/halls
 
-### Отримати зал із місцями
-GET {{baseUrl}}/halls/{{firstHallID}}
+### Отримати зал за ID
+GET {{baseUrl}}/halls/{{createHall.response.body.id}}
 
-### Видалити зал
-DELETE {{baseUrl}}/halls/{{firstHallID}}
+### Оновити зал
+PATCH {{baseUrl}}/halls/{{createHall.response.body.id}}
+Content-Type: application/json
 
+{
+  "name": "Updated Test Hall"
+}
 
-### Showings
+### Помилка: невалідні дані залу (400 Bad Request)
+POST {{baseUrl}}/halls
+Content-Type: application/json
 
-### Створити сеанс
+{
+  "name": "",
+  "rows": 0,
+  "seatsPerRow": -5
+}
+
+### Помилка: зал не знайдено (404 Not Found)
+GET {{baseUrl}}/halls/{{missingId}}
+
+# 3. SHOWINGS
+
+### Створити кінопоказ
+# @name createShowing
 POST {{baseUrl}}/showings
 Content-Type: application/json
 
 {
-  "filmId": "{{firstFilmID}}",
-  "hallId": "{{firstHallID}}",
-  "startsAt": "2030-12-25T18:30:00.000Z",
-  "price": 12500
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2027-01-15T18:00:00.000Z",
+  "price": 150
 }
 
-### Отримати всі сеанси
+### Отримати всі кінопокази
 GET {{baseUrl}}/showings
 
-### Фільтрувати сеанси за фільмом
-GET {{baseUrl}}/showings?filmId={{firstFilmID}}
+### Отримати кінопокази з пагінацією, фільтрацією та сортуванням
+GET {{baseUrl}}/showings?page=1&limit=10&sortBy=startsAt&sortOrder=ASC&filmId={{createFilm.response.body.id}}
 
-### Фільтрувати сеанси за датою
-GET {{baseUrl}}/showings?date=2030-12-25
+### Отримати кінопоказ за ID
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}
 
-### Отримати сеанс за ID
-GET {{baseUrl}}/showings/{{firstShowingID}}
+### Помилка: неіснуючий фільм (400 Not Found)
+POST {{baseUrl}}/showings
+Content-Type: application/json
 
+{
+  "filmId": "{{missingId}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2027-01-16T18:00:00.000Z",
+  "price": 150
+}
 
-### Bookings
+### Помилка: невалідні дані кінопоказу (400 Bad Request)
+POST {{baseUrl}}/showings
+Content-Type: application/json
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "invalid-date",
+  "price": -10
+}
+
+### Помилка: кінопоказ не знайдено (404 Not Found)
+GET {{baseUrl}}/showings/{{missingId}}
+
+# 4. BOOKINGS
 
 ### Створити бронювання
-POST {{baseUrl}}/showings/{{firstShowingID}}/bookings
+# @name createBooking
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
 Content-Type: application/json
 
 {
   "seats": [
-    { "row": 2, "seat": 5 },
-    { "row": 2, "seat": 6 }
+    {
+      "row": 1,
+      "seat": 1
+    },
+    {
+      "row": 1,
+      "seat": 2
+    }
   ]
 }
 
 ### Отримати всі бронювання
 GET {{baseUrl}}/bookings
 
-### Отримати бронювання конкретного сеансу
-GET {{baseUrl}}/showings/{{firstShowingID}}/bookings
+### Отримати бронювання для конкретного кінопоказу
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
 
-### Отримати місця та їхній статус
-GET {{baseUrl}}/showings/{{firstShowingID}}/seats
+### Отримати місця конкретного бронювання
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}/seats
 
-### Скасувати бронювання
-DELETE {{baseUrl}}/bookings/{{firstBookingID}}
+### Помилка: повторне бронювання тих самих місць (409 Conflict)
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: application/json
+
+{
+  "seats": [
+    {
+      "row": 1,
+      "seat": 1
+    }
+  ]
+}
+
+### Помилка: місце за межами залу (400 Bad Request)
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: application/json
+
+{
+  "seats": [
+    {
+      "row": 100,
+      "seat": 100
+    }
+  ]
+}
+
+### Помилка: бронювання не знайдено (404 Not Found)
+GET {{baseUrl}}/bookings/{{missingId}}/seats
+
+### Видалити бронювання
+DELETE {{baseUrl}}/bookings/{{createBooking.response.body.id}}
+
+# 5. DELETE CONFLICTS
+
+### Помилка: неможливо видалити фільм, який має кінопоказ (409 Conflict)
+DELETE {{baseUrl}}/films/{{createFilm.response.body.id}}
+
+### Помилка: неможливо видалити зал, у якому є кінопоказ (409 Conflict)
+DELETE {{baseUrl}}/halls/{{createHall.response.body.id}}
+```

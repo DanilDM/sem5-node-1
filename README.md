@@ -101,3 +101,49 @@ No database is used. Data is reset when the application restarts.
 Request data is validated using `class-validator`, `class-transformer`, and NestJS `ValidationPipe`.
 
 UUID identifiers are validated using `ParseUUIDPipe`.
+
+## Starting the Database
+
+
+```bash
+docker compose up -d
+```
+
+## Database Migrations
+
+The project uses TypeORM migrations. Automatic database schema synchronization is disabled (`synchronize: false`).
+
+Before running the seed script or starting the application for the first time, you must create the database tables by running the migrations.
+
+### Generate a Migration
+
+```bash
+npm run migration:generate
+```
+
+### Run Migrations
+
+```bash
+npm run migration:run
+```
+
+### Check Migration Status
+
+```bash
+npm run migration:show
+```
+
+### Revert the Last Migration
+
+```bash
+npm run migration:revert
+```
+
+## Seeding the Database with Test Data
+
+
+```bash
+npm run seed
+```
+
+The seed script populates the database with initial data required for the API, including movies, halls, screenings, and bookings.

@@ -4,32 +4,35 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, DataSource, QueryFailedError } from 'typeorm';
+
+import { Booking } from './entities/booking.entity.js';
+import { BookingSeat } from './entities/booking-seat.entity.js';
 
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ShowingsService } from '../showings/showings.service.js';
 import { HallsService } from '../halls/halls.service.js';
-import { SeatDto } from './dto/create-booking.dto.js';
-
-export interface Booking {
-  id: string;
-  showingId: string;
-  seats: SeatDto[];
-  totalPrice: number;
-}
 
 @Injectable()
 export class BookingsService {
-  private bookings: Booking[] = [];
-
   constructor(
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
+
+    @InjectRepository(BookingSeat)
+    private readonly bookingSeatRepository: Repository<BookingSeat>,
+
+    private readonly dataSource: DataSource,
+
     private readonly showingsService: ShowingsService,
     private readonly hallsService: HallsService,
   ) {}
 
-  create(showingId: string, dto: CreateBookingDto) {
-    const showing = this.showingsService.findRaw(showingId);
-    const hall = this.hallsService.findOne(showing.hallId);
+  async create(showingId: string, dto: CreateBookingDto) {
+    const showing = await this.showingsService.findRaw(showingId);
+    const hall = await this.hallsService.findOne(showing.hallId);
 
     for (const seat of dto.seats) {
       if (
@@ -42,71 +45,99 @@ export class BookingsService {
       }
     }
 
-    const bookedSeats = this.bookings
-      .filter((booking) => booking.showingId === showingId)
-      .flatMap((booking) => booking.seats);
-
-    const bookedSeatKeys = new Set(
-      bookedSeats.map((seat) => `${seat.row}-${seat.seat}`),
-    );
-
-    const unavailableSeats = dto.seats.filter((seat) =>
-      bookedSeatKeys.has(`${seat.row}-${seat.seat}`),
-    );
-
-    if (unavailableSeats.length > 0) {
-      const seatsList = unavailableSeats
-        .map((seat) => `${seat.row}-${seat.seat}`)
-        .join(', ');
-
-      throw new ConflictException(
-        `Ці місця вже заброньовані: ${seatsList}`,
-      );
-    }
-
-    // Розраховуємо загальну вартість.
     const totalPrice = showing.price * dto.seats.length;
 
-    const booking = {
-      id: randomUUID(),
-      showingId,
-      seats: dto.seats,
-      totalPrice,
-    };
+    try {
+      return await this.dataSource.transaction(
+        async (manager: { getRepository: (arg0: typeof Booking | typeof BookingSeat) => any; }) => {
+          const bookingRepository =
+            manager.getRepository(Booking);
 
-    this.bookings.push(booking);
+          const seatRepository =
+            manager.getRepository(BookingSeat);
 
-    return booking;
+          const booking = bookingRepository.create({
+            showingId,
+            totalPrice,
+          });
+
+          const savedBooking =
+            await bookingRepository.save(booking);
+
+          const seats = dto.seats.map((seat) =>
+            seatRepository.create({
+              bookingId: savedBooking.id,
+              showingId,
+              row: seat.row,
+              seat: seat.seat,
+            }),
+          );
+
+          await seatRepository.save(seats);
+
+          return {
+            id: savedBooking.id,
+            showingId,
+            seats: dto.seats,
+            totalPrice,
+          };
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof QueryFailedError &&
+        (error as any).driverError?.code === '23505'
+      ) {
+        throw new ConflictException(
+          'Одне або декілька місць уже заброньовані',
+        );
+      }
+
+      throw error;
+    }
   }
 
-  findAll() {
-    return this.bookings;
+  async findAll() {
+    return this.bookingRepository.find({
+      relations: {
+        seats: true,
+      },
+    });
   }
 
-  findByShowingId(showingId: string) {
-    this.showingsService.findRaw(showingId);
+  async findByShowingId(showingId: string) {
+    await this.showingsService.findRaw(showingId);
 
-    return this.bookings.filter(
-      (booking) => booking.showingId === showingId,
-    );
+    return this.bookingRepository.find({
+      where: { showingId },
+      relations: {
+        seats: true,
+      },
+    });
   }
 
-  getSeats(showingId: string) {
-    const showing = this.showingsService.findRaw(showingId);
-    const hall = this.hallsService.findOne(showing.hallId);
+  async getSeats(showingId: string) {
+    const showing = await this.showingsService.findRaw(showingId);
+    const hall = await this.hallsService.findOne(showing.hallId);
 
-    const bookedSeats = this.bookings
-      .filter((booking) => booking.showingId === showingId)
-      .flatMap((booking) => booking.seats);
+    const bookedSeats = await this.bookingSeatRepository.find({
+      where: { showingId },
+    });
 
     const bookedSeatKeys = new Set(
-      bookedSeats.map((seat) => `${seat.row}-${seat.seat}`),
+      bookedSeats.map(
+        (seat: { row: any; seat: any; }) => `${seat.row}-${seat.seat}`,
+      ),
     );
 
     const seats = [];
 
     for (let row = 1; row <= hall.rows; row++) {
-      for (let seat = 1; seat <= hall.seatsPerRow; seat++) {
+      for (
+        let seat = 1;
+        seat <= hall.seatsPerRow;
+        seat++
+      ) {
         seats.push({
           row,
           seat,
@@ -118,19 +149,22 @@ export class BookingsService {
     return seats;
   }
 
-  remove(id: string) {
-    const index = this.bookings.findIndex(
-      (booking) => booking.id === id,
-    );
+  async remove(id: string) {
+    const booking = await this.bookingRepository.findOne({
+      where: { id },
+      relations: {
+        seats: true,
+      },
+    });
 
-    if (index === -1) {
+    if (!booking) {
       throw new NotFoundException(
         `Бронювання з ID ${id} не знайдено`,
       );
     }
 
-    const [deletedBooking] = this.bookings.splice(index, 1);
+    await this.bookingRepository.remove(booking);
 
-    return deletedBooking;
+    return ;
   }
 }

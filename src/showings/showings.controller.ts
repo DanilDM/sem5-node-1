@@ -53,17 +53,37 @@ export class ShowingsController {
     example: '2030-12-25',
     description: 'Фільтр за датою YYYY-MM-DD',
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Номер сторінки, ціле число від 1 (за замовчуванням 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 20,
+    description: 'Кількість записів на сторінці, від 1 до 100 (за замовчуванням 20)',
+  })
+  @ApiQuery({
+    name: 'sort',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'asc',
+    description: 'Порядок за часом початку (за замовчуванням asc)',
+  })
   @ApiOkResponse({
-    description: 'Список сеансів із назвами фільмів і залів',
+    description:
+      'Об’єкт { items, total, page, limit }: items — сеанси поточної сторінки з назвами фільмів і залів, total — загальна кількість за фільтрами',
   })
   @ApiBadRequestResponse({
-    description: 'Некоректний формат query-параметрів',
+    description:
+      'Некоректний формат query-параметрів (page, limit, date, sort)',
   })
   findAll(@Query() query: GetShowingsQueryDto) {
-    return this.showingsService.findAll(
-      query.filmId,
-      query.date,
-    );
+    return this.showingsService.findAll(query);
   }
 
   @Get(':id')

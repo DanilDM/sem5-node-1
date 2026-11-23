@@ -1,9 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsDateString,
+  IsIn,
+  IsInt,
   IsOptional,
   IsUUID,
   Matches,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class GetShowingsQueryDto {
@@ -25,4 +30,39 @@ export class GetShowingsQueryDto {
     message: 'Дата повинна мати формат YYYY-MM-DD',
   })
   date?: string;
+
+  @ApiPropertyOptional({
+    example: 1,
+    default: 1,
+    minimum: 1,
+    description: 'Номер сторінки, ціле число від 1',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page: number = 1;
+
+  @ApiPropertyOptional({
+    example: 20,
+    default: 20,
+    minimum: 1,
+    maximum: 100,
+    description: 'Кількість записів на сторінці, від 1 до 100',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number = 20;
+
+  @ApiPropertyOptional({
+    enum: ['asc', 'desc'],
+    default: 'asc',
+    description: 'Порядок за часом початку',
+  })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sort: 'asc' | 'desc' = 'asc';
 }

@@ -7,9 +7,12 @@ import { FilmsModule } from '../films/films.module.js';
 import { HallsModule } from '../halls/halls.module.js';
 
 import { SHOWINGS_SERVICE } from './showings.constants.js';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Showing } from './entities/showing.entity.js';
 
 @Module({
   imports: [
+    TypeOrmModule.forFeature([Showing]),
     forwardRef(() => FilmsModule),
     forwardRef(() => HallsModule),
   ],

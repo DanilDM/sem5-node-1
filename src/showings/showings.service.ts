@@ -3,156 +3,152 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
+import { Showing } from './entities/showing.entity.js';
 import { FilmsService } from '../films/films.service.js';
 import { HallsService } from '../halls/halls.service.js';
 import { CreateShowingDto } from './dto/create-showing.dto.js';
+import { GetShowingsQueryDto } from './dto/get-showings-query.dto.js';
 
-export interface Showing {
+export interface ShowingResponse {
   id: string;
   filmId: string;
   hallId: string;
   startsAt: string;
   price: number;
-}
-
-export interface ShowingResponse extends Showing {
   filmTitle: string;
   hallName: string;
 }
 
+export interface PaginatedShowings {
+  items: ShowingResponse[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 @Injectable()
 export class ShowingsService {
-  private readonly showings: Showing[] = [];
-
   constructor(
+    @InjectRepository(Showing)
+    private readonly showingRepository: Repository<Showing>,
+
     private readonly filmsService: FilmsService,
     private readonly hallsService: HallsService,
   ) {}
 
-  create(dto: CreateShowingDto): Showing {
-    if (!this.filmsService.exists(dto.filmId)) {
+  async create(dto: CreateShowingDto) {
+    if (!(await this.filmsService.exists(dto.filmId))) {
       throw new BadRequestException(
         `Фільм з id "${dto.filmId}" не знайдено`,
       );
     }
 
-    if (!this.hallsService.exists(dto.hallId)) {
+    if (!(await this.hallsService.exists(dto.hallId))) {
       throw new BadRequestException(
         `Зал з id "${dto.hallId}" не знайдено`,
       );
     }
 
-    const startsAtDate = new Date(dto.startsAt);
+    const startsAt = new Date(dto.startsAt);
 
-    if (startsAtDate.getTime() <= Date.now()) {
+    if (startsAt.getTime() <= Date.now()) {
       throw new BadRequestException(
         'Дата та час початку сеансу не можуть бути в минулому',
       );
     }
 
-    const showing: Showing = {
-      id: randomUUID(),
+    const showing = this.showingRepository.create({
       filmId: dto.filmId,
       hallId: dto.hallId,
-      startsAt: dto.startsAt,
+      startsAt,
       price: dto.price,
+    });
+
+    const saved = await this.showingRepository.save(showing);
+
+    return {
+      id: saved.id,
+      filmId: saved.filmId,
+      hallId: saved.hallId,
+      startsAt: saved.startsAt.toISOString(),
+      price: saved.price,
     };
-
-    this.showings.push(showing);
-
-    return showing;
   }
 
-  findAll(
-    filmId?: string,
-    date?: string,
-  ): ShowingResponse[] {
-    let result = [...this.showings];
+  async findAll(query: GetShowingsQueryDto): Promise<PaginatedShowings> {
+    const { filmId, date, page, limit, sort } = query;
+
+    const qb = this.showingRepository
+      .createQueryBuilder('showing')
+      .innerJoinAndSelect('showing.film', 'film')
+      .innerJoinAndSelect('showing.hall', 'hall');
 
     if (filmId) {
-      result = result.filter(
-        (showing) => showing.filmId === filmId,
-      );
+      qb.andWhere('showing.filmId = :filmId', { filmId });
     }
 
     if (date) {
-      const startOfDay = new Date(`${date}T00:00:00.000Z`).getTime();
-      const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
+      const startOfDay = new Date(`${date}T00:00:00.000Z`);
+      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
 
-      result = result.filter((showing) => {
-        const time = new Date(showing.startsAt).getTime();
-
-        return time >= startOfDay && time < endOfDay;
-      });
+      qb.andWhere('showing.startsAt >= :startOfDay', { startOfDay })
+        .andWhere('showing.startsAt < :endOfDay', { endOfDay });
     }
 
-    result.sort((a, b) => {
-      const timeDifference =
-        new Date(a.startsAt).getTime() -
-        new Date(b.startsAt).getTime();
+    qb.orderBy('showing.startsAt', sort === 'desc' ? 'DESC' : 'ASC')
+      .addOrderBy('showing.id', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
 
-      return timeDifference || a.id.localeCompare(b.id);
-    });
+    const [showings, total] = await qb.getManyAndCount();
 
-    return result.map((showing) => this.toResponse(showing));
+    return {
+      items: showings.map((showing) => this.toResponse(showing)),
+      total,
+      page,
+      limit,
+    };
   }
 
-  findOne(id: string): ShowingResponse {
-    const showing = this.showings.find(
-      (item) => item.id === id,
-    );
+  async findOne(id: string): Promise<ShowingResponse> {
+    const showing = await this.showingRepository.findOne({
+      where: { id },
+      relations: { film: true, hall: true },
+    });
 
     if (!showing) {
-      throw new NotFoundException(
-        `Сеанс з id "${id}" не знайдено`,
-      );
+      throw new NotFoundException(`Сеанс з id "${id}" не знайдено`);
     }
 
     return this.toResponse(showing);
   }
 
-  findRaw(id: string): Showing {
-    const showing = this.showings.find(
-      (item) => item.id === id,
-    );
+  async findRaw(id: string): Promise<Showing> {
+    const showing = await this.showingRepository.findOne({ where: { id } });
 
     if (!showing) {
-      throw new NotFoundException(
-        `Сеанс з id "${id}" не знайдено`,
-      );
+      throw new NotFoundException(`Сеанс з id "${id}" не знайдено`);
     }
 
     return showing;
   }
 
-  exists(id: string): boolean {
-    return this.showings.some(
-      (showing) => showing.id === id,
-    );
-  }
-
-  findByFilmId(filmId: string): Showing[] {
-    return this.showings.filter(
-      (showing) => showing.filmId === filmId,
-    );
-  }
-
-  findByHallId(hallId: string): Showing[] {
-    return this.showings.filter(
-      (showing) => showing.hallId === hallId,
-    );
+  async exists(id: string): Promise<boolean> {
+    return this.showingRepository.existsBy({ id });
   }
 
   private toResponse(showing: Showing): ShowingResponse {
-    const film = this.filmsService.findOne(showing.filmId);
-    const hall = this.hallsService.findOne(showing.hallId);
-
     return {
-      ...showing,
-      filmTitle: film.title,
-      hallName: hall.name,
+      id: showing.id,
+      filmId: showing.filmId,
+      hallId: showing.hallId,
+      startsAt: showing.startsAt.toISOString(),
+      price: showing.price,
+      filmTitle: showing.film.title,
+      hallName: showing.hall.name,
     };
   }
 }

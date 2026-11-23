@@ -64,7 +64,7 @@ export class HallsController {
   @ApiConflictResponse({
     description: 'Неможливо видалити зал, який використовується в сеансах',
   })
-  remove(@Param('id', new ParseUUIDPipe()) id: string): void {
-    this.hallsService.remove(id);
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
+    return this.hallsService.remove(id);
   }
 }

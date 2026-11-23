@@ -2,19 +2,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  Inject, 
-  forwardRef,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { CreateHallDto } from './dto/create-hall.dto.js';
-import { SHOWINGS_SERVICE } from '../showings/showings.constants.js';
+import { InjectRepository } from '@nestjs/typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 
-export interface Hall {
-  id: string;
-  name: string;
-  rows: number;
-  seatsPerRow: number;
-}
+import { Hall } from './entities/hall.entity.js';
+import { Showing } from '../showings/entities/showing.entity.js';
+import { CreateHallDto } from './dto/create-hall.dto.js';
 
 export interface Seat {
   row: number;
@@ -27,49 +21,44 @@ export interface HallWithSeats extends Hall {
 
 @Injectable()
 export class HallsService {
-  private readonly halls: Hall[] = [];
-
   constructor(
-    @Inject(forwardRef(() => SHOWINGS_SERVICE))
-    private readonly showingsService: {
-      findByHallId(id: string): unknown[];
-    },
+    @InjectRepository(Hall)
+    private readonly hallRepository: Repository<Hall>,
+
+    @InjectRepository(Showing)
+    private readonly showingRepository: Repository<Showing>,
   ) {}
 
-  create(dto: CreateHallDto): Hall {
-    const nameExists = this.halls.some(
-      (hall) => hall.name.toLowerCase() === dto.name.trim().toLowerCase(),
-    );
+  async create(dto: CreateHallDto): Promise<Hall> {
+    const name = dto.name.trim();
+
+    const nameExists = await this.hallRepository
+      .createQueryBuilder('hall')
+      .where('LOWER(hall.name) = :name', { name: name.toLowerCase() })
+      .getExists();
 
     if (nameExists) {
-      throw new ConflictException(
-        `Зал з назвою "${dto.name}" вже існує`,
-      );
+      throw new ConflictException(`Зал з назвою "${dto.name}" вже існує`);
     }
 
-    const hall: Hall = {
-      id: randomUUID(),
-      name: dto.name.trim(),
+    const hall = this.hallRepository.create({
+      name,
       rows: dto.rows,
       seatsPerRow: dto.seatsPerRow,
-    };
+    });
 
-    this.halls.push(hall);
-
-    return hall;
+    return this.hallRepository.save(hall);
   }
 
-  findAll(): Hall[] {
-    return [...this.halls];
+  async findAll(): Promise<Hall[]> {
+    return this.hallRepository.find();
   }
 
-  findOne(id: string): HallWithSeats {
-    const hall = this.halls.find((item) => item.id === id);
+  async findOne(id: string): Promise<HallWithSeats> {
+    const hall = await this.hallRepository.findOne({ where: { id } });
 
     if (!hall) {
-      throw new NotFoundException(
-        `Зал з id "${id}" не знайдено`,
-      );
+      throw new NotFoundException(`Зал з id "${id}" не знайдено`);
     }
 
     const seats: Seat[] = [];
@@ -86,27 +75,40 @@ export class HallsService {
     };
   }
 
-  remove(id: string) {
-    const index = this.halls.findIndex((hall) => hall.id === id);
+  async remove(id: string): Promise<void> {
+    const hall = await this.hallRepository.findOne({ where: { id } });
 
-    if (index === -1) {
-      throw new NotFoundException(
-        `Зал з ID ${id} не знайдено`,
-      );
+    if (!hall) {
+      throw new NotFoundException(`Зал з ID ${id} не знайдено`);
     }
 
-    const relatedShowings = this.showingsService.findByHallId(id);
+    const showingsCount = await this.showingRepository.count({
+      where: { hallId: id },
+    });
 
-    if (relatedShowings.length > 0) {
+    if (showingsCount > 0) {
       throw new ConflictException(
         'Неможливо видалити зал, оскільки для нього існують сеанси',
       );
     }
 
-    this.halls.splice(index, 1);
+    try {
+      await this.hallRepository.delete(id);
+    } catch (error) {
+      if (
+        error instanceof QueryFailedError &&
+        (error as any).driverError?.code === '23503'
+      ) {
+        throw new ConflictException(
+          'Неможливо видалити зал, оскільки для нього існують сеанси',
+        );
+      }
+
+      throw error;
+    }
   }
 
-  exists(id: string): boolean {
-    return this.halls.some((hall) => hall.id === id);
+  async exists(id: string): Promise<boolean> {
+    return this.hallRepository.existsBy({ id });
   }
 }

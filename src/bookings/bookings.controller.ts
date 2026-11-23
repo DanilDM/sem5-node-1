@@ -63,8 +63,8 @@ export class BookingsController {
   @ApiParam({ name: 'id', description: 'UUID бронювання' })
   @ApiResponse({ status: 204, description: 'Бронювання скасовано' })
   @ApiResponse({ status: 404, description: 'Бронювання не знайдено' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    this.bookingsService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.bookingsService.remove(id);
   }
 
   @Get('showings/:id/seats')

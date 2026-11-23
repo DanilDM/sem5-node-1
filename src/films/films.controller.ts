@@ -78,7 +78,7 @@ export class FilmsController {
   @ApiConflictResponse({
     description: 'Неможливо видалити фільм, на який є посилання',
   })
-  remove(@Param('id', new ParseUUIDPipe()) id: string): void {
-    this.filmsService.remove(id);
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
+    return this.filmsService.remove(id);
   }
 }
